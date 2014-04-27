@@ -1,9 +1,3 @@
-/**
- * Test epoll edge triggering with a Unix domain listening socket.
- *
- * The results are not what I expect.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/epoll.h>

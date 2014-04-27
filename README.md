@@ -13,4 +13,3 @@ strace -ff -o unix-domain.out ./unix-domain /tmp/scratch-path
 ```
 
 and look in unix-domain.<pids> for the parent and child details.
-
