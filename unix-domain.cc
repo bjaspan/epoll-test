@@ -160,6 +160,25 @@ int main(int argc, const char * const argv[])
     ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
     expect_equal(0, ret, "epoll 2 after connect 2");
 
+    // Accept one connection.
+    int sock = accept(listener, NULL, 0);
+    if (sock < 0) {
+      handle_error("accept");
+    }
+	
+    // The queue is still not empty, so still no EPOLLIN after accept.
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    expect_equal(0, ret, "epoll 3 after accept");
+
+    // What if we close the socket?
+    if (close(sock) < 0) {
+      handle_error("accept");
+    }
+      
+    // The queue is still not empty, so still no EPOLLIN.
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    expect_equal(0, ret, "epoll 4 after close");
+
     // Tell the child to quit.
     write_pipe(s2c, 'q');
     expect_equal('r', read_pipe(c2s), "client quit confirmation");
