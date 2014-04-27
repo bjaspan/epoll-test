@@ -12,4 +12,4 @@ For more fun, try:
 strace -ff -o unix-domain.out ./unix-domain /tmp/scratch-path
 ```
 
-and look in unix-domain.\<pids\> for the parent and child details.
+and look in unix-domain.out.\<pids\> for the parent and child details.
