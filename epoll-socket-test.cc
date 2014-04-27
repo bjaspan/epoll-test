@@ -3,6 +3,8 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <iostream>
 
 void handle_error(const char *msg)
@@ -28,16 +30,15 @@ char write_pipe(int *p, char c)
   }
 }
   
-int socket_connect(const struct sockaddr_un *saddr)
+int socket_connect(const struct sockaddr *saddr)
 {
-  int client = socket(AF_UNIX, SOCK_STREAM, 0);
+  int client = socket(saddr->sa_family, SOCK_STREAM, 0);
   if (client < 0) {
     handle_error("client socket");
   }
 
   // client is a blocking socket. As a side note, the fact that this call
-  // returns proves that connect() on Unix domain sockets does not wait for
-  // accept().
+  // returns proves that connect() does not wait for accept().
   if (connect(client, (struct sockaddr *) saddr, sizeof(*saddr)) < 0) {
     handle_error("connect");
   }
@@ -56,20 +57,44 @@ template <typename T> void expect_equal(T a, T b, const char *msg)
   }
 }
 
+void usage()
+{
+  std::cerr << "Usage: epoll-test [unix|inet] [path|port]" << std::endl;
+  exit(1);
+}
+
 int main(int argc, const char * const argv[])
 {
-  if (argc < 2) {
-    std::cerr << "Usage: unix-domain socket-path" << std::endl;
-    exit(1);
+  if (argc != 3) {
+    usage();
   }
 
-  // Set up the provided socket-path as a sockaddr_un.
-  const char *path = argv[1];
-  unlink(path);
+  const char *protocol = argv[1];
+  const char *port = argv[2];
+
   struct sockaddr_un saddr_un;
-  memset(&saddr_un, 0, sizeof(saddr_un));
-  saddr_un.sun_family = AF_UNIX;
-  strncpy(saddr_un.sun_path, path, sizeof(saddr_un.sun_path)-1);
+  struct sockaddr_in saddr_in;
+  struct sockaddr *saddr;
+
+  if (strcmp(protocol, "unix") == 0) {
+    unlink(port);
+    memset(&saddr_un, 0, sizeof(saddr_un));
+    saddr_un.sun_family = AF_UNIX;
+    strncpy(saddr_un.sun_path, port, sizeof(saddr_un.sun_path)-1);
+    saddr = (struct sockaddr *) &saddr_un;
+  }
+  else if (strcmp(protocol, "inet") == 0) {
+    memset(&saddr_in, 0, sizeof(saddr_in));
+    saddr_in.sin_family = AF_INET;
+    saddr_in.sin_port = htons(atoi(port));
+    if (inet_aton("127.0.0.1", &saddr_in.sin_addr) < 0) {
+      handle_error("inet_aton");
+    }
+    saddr = (struct sockaddr *) &saddr_in;
+  }
+  else {
+    usage();
+  }
 
   // Parent is "server", child is "client". Set up server-to-client and
   // client-to-server pipes for synchronization.
@@ -93,7 +118,7 @@ int main(int argc, const char * const argv[])
     while ((c = read_pipe(s2c))) {
       switch (c) {
       case 'c':
-	socket_connect(&saddr_un);
+	socket_connect(saddr);
 	write_pipe(c2s, 'd');
 	break;
       case 'q':
@@ -108,11 +133,11 @@ int main(int argc, const char * const argv[])
 
   default:
     // Create a listening socket on sockaddr_un.
-    int listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    int listener = socket(saddr->sa_family, SOCK_STREAM, 0);
     if (listener < 0) {
       handle_error("socket");
     }
-    if (bind(listener, (struct sockaddr *) &saddr_un, sizeof(saddr_un)) < 0) {
+    if (bind(listener, (struct sockaddr *) saddr, sizeof(*saddr)) < 0) {
       handle_error("bind");
     }
     if (listen(listener, 1024) < 0) {
@@ -137,7 +162,7 @@ int main(int argc, const char * const argv[])
 
     // Ask client to connect.
 #ifdef INLINE_CONNECT
-    socket_connect(&saddr_un);
+    socket_connect(saddr);
 #else
     write_pipe(s2c, 'c');
     expect_equal('d', read_pipe(c2s), "client connect 1 confirmation");
@@ -153,7 +178,7 @@ int main(int argc, const char * const argv[])
 
     // Ask the client to connect again.
 #ifdef INLINE_CONNECT
-    socket_connect(&saddr_un);
+    socket_connect(saddr);
 #else
     write_pipe(s2c, 'c');
     expect_equal('d', read_pipe(c2s), "client connect 2 confirmation");

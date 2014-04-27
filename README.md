@@ -1,5 +1,5 @@
-unix-domain.cc tests epoll edge triggering with a Unix domain listening socket.
-The results are not what I expect.
+epoll-socket-test.cc tests epoll edge triggering with a Unix domain and TCP
+listening socket.  The results are not what I expect.
 
 # Setup
 
@@ -62,16 +62,25 @@ epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 0) = 1
 # Test program
 
 ```
-$ c++ -o unix-domain unix-domain.cc
-$ ./unix-domain /tmp/scratch-path
+Usage: epoll-test [unix|inet] [path|port]
+```
+
+To build and run:
+
+```
+$ c++ -o epoll-socket-test epoll-socket-test.cc
+$ ./epoll-socket-test unix /tmp/scratch-path
 expected 0 == 1: epoll 1 after connect 2
 ```
+
+The default build performs the connections via a child process. Add
+-DINLINE_CONNECT to connect from the main process. The results are the same.
 
 For more fun, try:
 
 ```
-strace -ff -o unix-domain.out ./unix-domain /tmp/scratch-path
+strace -ff -o epoll-socket-test.out ./epoll-socket-test unix /tmp/scratch-path
 ```
 
-and look in unix-domain.out.\<pids\> for the parent and child details.
+and look in epoll-socket-test.out.\<pids\> for the parent and child details.
 
