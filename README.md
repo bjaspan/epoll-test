@@ -24,7 +24,7 @@ bind(7, {sa_family=AF_FILE, path="/tmp/scratch-path"}, 110) = 0
 listen(7, 1024)                         = 0
 epoll_create(1024)                      = 8
 epoll_ctl(8, EPOLL_CTL_ADD, 7, {EPOLLIN|EPOLLET, {u32=7, u64=7}}) = 0
-epoll_wait(8, {}, 16, 100)              = 0
+epoll_wait(8, {}, 16, 0)              = 0
 ```
 
 In the same process (if you compile the test program with -DINLINE_CONNECT),
@@ -38,8 +38,8 @@ connect(9, {sa_family=AF_FILE, path="/tmp/scratch-path"}, 110) = 0
 epoll\_wait returns the EPOLLIN event just once, as expected:
 
 ```
-epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 100) = 1
-epoll_wait(8, {}, 16, 100)              = 0
+epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 0) = 1
+epoll_wait(8, {}, 16, 0)              = 0
 ```
 
 Without calling accept(), open a second connection to the same listening
@@ -54,7 +54,7 @@ The previous pending connection is not yet accepted, so the read state of the
 listening socket has not changed. However, epoll\_wait() returns it again:
 
 ```
-epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 100) = 1
+epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 0) = 1
 ```
 
 # Test program
