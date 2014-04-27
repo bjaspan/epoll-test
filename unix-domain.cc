@@ -48,10 +48,10 @@ int socket_connect(const struct sockaddr_un *saddr)
 template <typename T> void expect_equal(T a, T b, const char *msg)
 {
   if (! (a == b)) {
-    std::cout << "expected " << a << " == " << b;
     if (msg != NULL) {
-      std::cout << ": " << msg;
+      std::cout << msg << ": ";
     }
+    std::cout << "expected " << a << ", got " << b;
     std::cout << std::endl;
   }
 }
@@ -123,41 +123,51 @@ int main(int argc, const char * const argv[])
     struct epoll_event events[16];
     const int epollfd = epoll_create(1024);
     struct epoll_event event = {
-      EPOLLIN | /* EPOLLOUT | */ EPOLLRDHUP | EPOLLPRI | EPOLLET, 0
+      EPOLLIN | /* EPOLLOUT | EPOLLRDHUP | EPOLLPRI | */EPOLLET, 0
     };
     event.data.fd = listener;
     epoll_ctl(epollfd, EPOLL_CTL_ADD, listener, &event);
 
+    int timeout = 0;
+    
     // Before connect, nothing.
     int ret;
-    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), timeout);
     expect_equal(0, ret, "epoll before connect");
 
     // Ask client to connect.
+#ifdef INLINE_CONNECT
+    socket_connect(&saddr_un);
+#else
     write_pipe(s2c, 'c');
     expect_equal('d', read_pipe(c2s), "client connect 1 confirmation");
+#endif
 
     // The connection triggers EPOLLIN.
-    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), timeout);
     expect_equal(1, ret, "epoll 1 after connect 1");
 
     // A second epoll does not return EPOLLIN due to EPOLLET.
-    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), timeout);
     expect_equal(0, ret, "epoll 2 after connect 1");
 
     // Ask the client to connect again.
+#ifdef INLINE_CONNECT
+    socket_connect(&saddr_un);
+#else
     write_pipe(s2c, 'c');
     expect_equal('d', read_pipe(c2s), "client connect 2 confirmation");
+#endif
 
     // CONFUSION. We have NOT called accept, so the client's first connection
     // should still be pending. The socket has not changed from "not empty" so
     // I would not expect another EPOLLIN event. But it arrives, as
     // expect_equal displays a warning about it.
-    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), timeout);
     expect_equal(0, ret, "epoll 1 after connect 2");
 
     // As expected, EPOLLET means we do not get an event here.
-    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), timeout);
     expect_equal(0, ret, "epoll 2 after connect 2");
 
     // Accept one connection.
@@ -167,7 +177,7 @@ int main(int argc, const char * const argv[])
     }
 	
     // The queue is still not empty, so still no EPOLLIN after accept.
-    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), timeout);
     expect_equal(0, ret, "epoll 3 after accept");
 
     // What if we close the socket?
@@ -176,7 +186,7 @@ int main(int argc, const char * const argv[])
     }
       
     // The queue is still not empty, so still no EPOLLIN.
-    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), 0);
+    ret = epoll_wait(epollfd, events, sizeof(events) / sizeof(*events), timeout);
     expect_equal(0, ret, "epoll 4 after close");
 
     // Tell the child to quit.

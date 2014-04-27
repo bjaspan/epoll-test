@@ -14,6 +14,49 @@ For a listening socket, a pending connection triggers EPOLLIN. I would expect a
 second connection arriving before the first one is accept()ed not to trigger
 another EPOLLIN with edge triggering, but apparently it does.
 
+# Smoking gun
+
+Create a listening Unix domain socket and add it to an epoll instance:
+
+```
+socket(PF_FILE, SOCK_STREAM, 0)         = 7
+bind(7, {sa_family=AF_FILE, path="/tmp/scratch-path"}, 110) = 0
+listen(7, 1024)                         = 0
+epoll_create(1024)                      = 8
+epoll_ctl(8, EPOLL_CTL_ADD, 7, {EPOLLIN|EPOLLET, {u32=7, u64=7}}) = 0
+epoll_wait(8, {}, 16, 100)              = 0
+```
+
+In the same process (if you compile the test program with -DINLINE_CONNECT),
+connect to the listening socket:
+
+```
+socket(PF_FILE, SOCK_STREAM, 0)         = 9
+connect(9, {sa_family=AF_FILE, path="/tmp/scratch-path"}, 110) = 0
+```
+
+epoll\_wait returns the EPOLLIN event just once, as expected:
+
+```
+epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 100) = 1
+epoll_wait(8, {}, 16, 100)              = 0
+```
+
+Without calling accept(), open a second connection to the same listening
+socket:
+
+```
+socket(PF_FILE, SOCK_STREAM, 0)         = 10
+connect(10, {sa_family=AF_FILE, path="/tmp/scratch-path"}, 110) = 0
+```
+
+The previous pending connection is not yet accepted, so the read state of the
+listening socket has not changed. However, epoll\_wait() returns it again:
+
+```
+epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 100) = 1
+```
+
 # Test program
 
 ```
@@ -29,3 +72,4 @@ strace -ff -o unix-domain.out ./unix-domain /tmp/scratch-path
 ```
 
 and look in unix-domain.out.\<pids\> for the parent and child details.
+
