@@ -1,18 +1,20 @@
 unix-domain.cc tests epoll edge triggering with a Unix domain listening socket.
 The results are not what I expect.
 
-# Background
+# Setup
 
 My understanding of epoll edge-triggering is that it returns an event only when
 the underlying state changes. If data arrives on a fd, you get an EPOLLIN
 event. But if more data arrives on the fd before all the previous data has been
-read, you do NOT get another EPOLLIN event. You first have to read the socket
-until you get EGAIN/EWOULDBLOCK; then any newly arrived data will trigger
-another EPOLLIN.
+read, you do NOT get another EPOLLIN event. You first have to read the fd until
+you get EAGAIN/EWOULDBLOCK; then any newly arrived data will trigger another
+EPOLLIN.
 
 For a listening socket, a pending connection triggers EPOLLIN. I would expect a
 second connection arriving before the first one is accept()ed not to trigger
 another EPOLLIN with edge triggering, but apparently it does.
+
+Is this correct behavior? Will it always happen?
 
 # Smoking gun
 
