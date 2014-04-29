@@ -1,7 +1,23 @@
-epoll-socket-test.cc tests epoll edge triggering with a Unix domain and TCP
+This repo contains a number of tools to test listening socket behavior,
+particularly when using epoll edge triggering. The tools were written to debug
+and gain full understanding of the process-management behavior of PHP-FPM.
+
+# Tools
+
+* epoll-socket-test: Tests epoll edge triggering with a unix or inet
 listening socket.  The results are not what I expect.
 
-# Setup
+* epoll-listen-fork: Simulates a socket server using epoll. Listenens on a unix
+  or inet socket using either level- or edge-triggering, and forks a child for
+  each epoll event which accepts a connection, sleeps for a specified time, and
+  then exits.
+
+* socket-connect: Connects to a unix or inet socket a specified number of
+  times, then reads a character from stdin and exits.
+
+# epoll-socket-test
+
+## Background
 
 My understanding of epoll edge-triggering is that it returns an event only when
 the underlying state changes. If data arrives on a fd, you get an EPOLLIN
@@ -10,13 +26,17 @@ read, you do NOT get another EPOLLIN event. You first have to read the fd until
 you get EAGAIN/EWOULDBLOCK; then any newly arrived data will trigger another
 EPOLLIN.
 
-For a listening socket, a pending connection triggers EPOLLIN. I would expect a
-second connection arriving before the first one is accept()ed not to trigger
-another EPOLLIN with edge triggering, but apparently it does.
+This does not seem to be true for listening sockets. It appears that epoll
+returns a separate EPOLLIN event for every newly arrived pending connection
+when edge triggering is enabled. The epoll(7) man page says that this *can*
+happen ("even with edge-triggered epoll, multiple events can be generated upon
+receipt of multiple chunks of data"), but does not guarantee that it will.
 
-Is this correct behavior? Will it always happen?
+I have not seen any documentation specifically for epoll edge triggering on
+listening sockets. I suspect that it is a consequence of the implementation,
+but probably not a guarantee, but am not yet sure.
 
-# Smoking gun
+## Smoking gun
 
 Create a listening Unix domain socket and add it to an epoll instance:
 
@@ -59,10 +79,10 @@ listening socket has not changed. However, epoll\_wait() returns it again:
 epoll_wait(8, {{EPOLLIN, {u32=7, u64=7}}}, 16, 0) = 1
 ```
 
-# Test program
+## Test program
 
 ```
-Usage: epoll-test [unix|inet] [path|port]
+Usage: epoll-socket-test [unix|inet] [path|port]
 ```
 
 To build and run:
