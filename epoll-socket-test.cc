@@ -30,7 +30,7 @@ char write_pipe(int *p, char c)
   }
 }
   
-int socket_connect(const struct sockaddr *saddr)
+int socket_connect(const struct sockaddr *saddr, socklen_t addrlen)
 {
   int client = socket(saddr->sa_family, SOCK_STREAM, 0);
   if (client < 0) {
@@ -39,7 +39,7 @@ int socket_connect(const struct sockaddr *saddr)
 
   // client is a blocking socket. As a side note, the fact that this call
   // returns proves that connect() does not wait for accept().
-  if (connect(client, (struct sockaddr *) saddr, sizeof(*saddr)) < 0) {
+  if (connect(client, (struct sockaddr *) saddr, addrlen) < 0) {
     handle_error("connect");
   }
 
@@ -75,6 +75,7 @@ int main(int argc, const char * const argv[])
   struct sockaddr_un saddr_un;
   struct sockaddr_in saddr_in;
   struct sockaddr *saddr;
+  socklen_t addrlen;
 
   if (strcmp(protocol, "unix") == 0) {
     unlink(port);
@@ -82,6 +83,7 @@ int main(int argc, const char * const argv[])
     saddr_un.sun_family = AF_UNIX;
     strncpy(saddr_un.sun_path, port, sizeof(saddr_un.sun_path)-1);
     saddr = (struct sockaddr *) &saddr_un;
+    addrlen = sizeof(saddr_un);
   }
   else if (strcmp(protocol, "inet") == 0) {
     memset(&saddr_in, 0, sizeof(saddr_in));
@@ -91,6 +93,7 @@ int main(int argc, const char * const argv[])
       handle_error("inet_aton");
     }
     saddr = (struct sockaddr *) &saddr_in;
+    addrlen = sizeof(saddr_in);
   }
   else {
     usage();
@@ -118,7 +121,7 @@ int main(int argc, const char * const argv[])
     while ((c = read_pipe(s2c))) {
       switch (c) {
       case 'c':
-	socket_connect(saddr);
+	socket_connect(saddr, addrlen);
 	write_pipe(c2s, 'd');
 	break;
       case 'q':
@@ -162,7 +165,7 @@ int main(int argc, const char * const argv[])
 
     // Ask client to connect.
 #ifdef INLINE_CONNECT
-    socket_connect(saddr);
+    socket_connect(saddr, addrlen);
 #else
     write_pipe(s2c, 'c');
     expect_equal('d', read_pipe(c2s), "client connect 1 confirmation");
@@ -178,7 +181,7 @@ int main(int argc, const char * const argv[])
 
     // Ask the client to connect again.
 #ifdef INLINE_CONNECT
-    socket_connect(saddr);
+    socket_connect(saddr, addrlen);
 #else
     write_pipe(s2c, 'c');
     expect_equal('d', read_pipe(c2s), "client connect 2 confirmation");
