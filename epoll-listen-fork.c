@@ -11,6 +11,8 @@
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <signal.h>
 
 void handle_error(const char *msg)
 {
@@ -20,7 +22,7 @@ void handle_error(const char *msg)
 
 void usage()
 {
-  fprintf(stderr, "Usage: epoll-listen-fork [unix|tcp] [path|port] [et|lt] sleep\n");
+  fprintf(stderr, "Usage: epoll-listen-fork [unix|inet] [path|port] [et|lt] sleep\n");
   exit(1);
 }
 
@@ -53,7 +55,7 @@ int main(int argc, const char * const argv[])
     memset(&saddr_in, 0, sizeof(saddr_in));
     saddr_in.sin_family = AF_INET;
     saddr_in.sin_port = htons(atoi(port));
-    if (inet_aton("127.0.0.1", &saddr_in.sin_addr) < 0) {
+    if (inet_aton("0.0.0.0", &saddr_in.sin_addr) < 0) {
       handle_error("inet_aton");
     }
     saddr = (struct sockaddr *) &saddr_in;
@@ -74,6 +76,9 @@ int main(int argc, const char * const argv[])
     usage();
   }
 
+  // Ignore SIGCHLD.
+  signal(SIGCHLD, SIG_IGN);
+  
   // Create a listening socket.
   int listener = socket(saddr->sa_family, SOCK_STREAM, 0);
   if (listener < 0) {
